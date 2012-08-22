@@ -4,11 +4,26 @@ from wp_private import botlogin, maillogin,mailaddr
 
 import logging
 import logging.handlers
-smtp_handler = logging.handlers.SMTPHandler(mailhost=("smtp.gmail.com", 587), 
-        fromaddr=mailaddr, toaddrs=mailaddr, subject=u"[toolserver] SlettNomBot crashed!",
-        credentials=maillogin, secure=())
+
 logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
+
+smtp_handler = logging.handlers.SMTPHandler(mailhost=("smtp.gmail.com", 587), 
+                fromaddr=mailaddr, toaddrs=mailaddr, subject=u"[toolserver] SlettNomBot crashed!",
+                credentials=maillogin, secure=())
+smtp_handler.setLevel(logging.ERROR)
 logger.addHandler(smtp_handler)
+
+file_handler = logging.FileHandler('slettnombot.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+#console_handler = logging.StreamHandler()
+#console_handler.setLevel(logging.INFO)
+#console_handler.setFormatter(formatter)
+#logger.addHandler(console_handler)
 
 import mwclient
 import re
@@ -62,7 +77,7 @@ class DeletionBot(object):
 
         page = self.site.Pages['Wikipedia:Sletting']
 
-        self.output('Reading deletion requests')
+        logger.info('Reading deletion requests')
 
         monthyear = self.today.strftime('%B %Y') # e.g. "januar 2012"
 
@@ -175,14 +190,14 @@ class DeletionBot(object):
         if not page.exists: 
             return False
 
-        self.output('Sjekker %s' % name)
+        logger.info('Sjekker %s' % name)
 
         text = page.edit()
         # Find all headings
         headings = self.r_h3_heading.findall(text)
         # Either malformed or a mass deletion request
         if len(headings) != 1: 
-            self.output('  either malformed or a mass deletion request, found %d h3 headers' % len(headings))
+            logger.warning('  either malformed or a mass deletion request, found %d h3 headers' % len(headings))
             return False
 
         # Find the subject
@@ -190,13 +205,13 @@ class DeletionBot(object):
 
         # Malformed
         if not m_subject: 
-            self.output('  malformed header: "%s" does not match "%s"' % (headings[0], m_subject))
+            logger.warning('  malformed header: "%s" does not match "%s"' % (headings[0], m_subject))
             return False
         subject = self.normalize_title(m_subject.group(1))
         
         # Wrong heading
         if not re.search(ur'(?i)^Wikipedia\:Sletting\/%s$' % re.escape(subject), name): 
-            self.output('  malformed header: "%s" , "%s"' % (name, subject))
+            logger.warning('  malformed header: "%s" , "%s"' % (name, subject))
             return False
 
         #self.notify_uploaders(page, subject)
@@ -214,7 +229,7 @@ class DeletionBot(object):
         # Check last decision
         status = ''
         if len(decisions) > 0:
-            self.output(' -> Fant %d avgjørelser: %s' % (len(decisions), ', '.join(decisions)))
+            logger.info('Fant %d avgjørelser: %s' % (len(decisions), ', '.join(decisions)))
 
             if decisions[-1] == 'beholdt':
                 status = 'b'
@@ -233,7 +248,7 @@ class DeletionBot(object):
         if status != '': 
             last_rev = page.revisions(limit = 1).next()
             timedelta = self.today - datetime.datetime(*last_rev.get('timestamp')[:6])
-            self.output('    Status: %s, delta: %.f s' % (status, timedelta.total_seconds()))
+            logger.info('    Status: %s, delta: %.f s' % (status, timedelta.total_seconds()))
 
             if status == 'b':
                 page_subject = self.site.Pages[subject]
@@ -245,9 +260,9 @@ class DeletionBot(object):
             if timedelta.total_seconds() >= self.archival_threshold:
                 # Check whether the last user was an admin
                 if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
-                    self.output('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
+                    logger.info('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
                     self.not_admin_closed.append((page.name, last_rev))
-                self.output('    Merker for arkivering')
+                logger.info('    Merker for arkivering')
                 return { 'archive': True, 'status': status }
             else:
                 return { 'archive': False, 'status': status }
@@ -354,13 +369,14 @@ class DeletionBot(object):
 
     def insert_kept(self, name, page_nom, page_subject, nomination_date):
         if page_subject.namespace % 2 == 0:
-            self.output('Inserting keep to %s' % page_subject.name)
 
             talk_page = self.site.Pages[self.get_talk(page_subject)]
             backlinks = page_nom.backlinks(generator = False)
             if talk_page.name in backlinks:
-                self.output('  Deletion request is already backlinked')
+                logger.debug('  Deletion request is already backlinked')
                 return
+
+            logger.info('Inserting keep to %s' % page_subject.name)
 
             kept = '{{Sletting-beholdt | %s | %s }}' % (nomination_date, name)
 
@@ -378,7 +394,7 @@ class DeletionBot(object):
                     try:
                         self.site.wait(wait_token)
                     except mwclient.MaximumRetriesExceeded:
-                        return self.output('ERROR: Unable to save page')
+                        return logger.error('Unable to save page!')
                 else:
                     return True
 
@@ -386,7 +402,7 @@ class DeletionBot(object):
 
         backlinks = page_nom.backlinks(generator = False)
         if page_subject.name in backlinks:
-            self.output('Fjerner {{Sletting}} fra %s' % page_subject.name)
+            logger.info('Fjerner {{Sletting}} fra %s' % page_subject.name)
 
             text = page_subject.edit()
             try:
@@ -398,14 +414,14 @@ class DeletionBot(object):
                 elif 'slettingfordi' in dp.templates:
                     tpl = dp.templates['slettingfordi'][0]
                 else:
-                    self.output('  Fant ingen slettemal')
+                    logger.info('  Fant ingen slettemal')
                     return
                 text = text[0:tpl.begin] + text[tpl.end:]
                 text = text.strip()
-                self.output('  vha. DanmicholoParser')
+                logger.info('  vha. DanmicholoParser')
             except:
                 text = re.sub(r'\{\{[Ss]lett.+?\}\}', '', text) # this may fail if template contains subtemplates
-                self.output('  vha. regexp')
+                logger.info('  vha. regexp')
 
             wait_token = self.site.wait_token()
             while True:
@@ -420,7 +436,7 @@ class DeletionBot(object):
                     try:
                         self.site.wait(wait_token)
                     except mwclient.MaximumRetriesExceeded:
-                        return self.output('ERROR: Unable to save page')
+                        return logger.error('Unable to save page')
                 else:
                     return True
 
@@ -445,7 +461,7 @@ class DeletionBot(object):
                 page.save(text, summary)
 
     def run(self, iterator = None):
-        self.output('Running deletion bot')
+        logger.info('============= This is SlettNomBot running ================')
         self.read_listing()
         self.save_not_admin_closed()
 
@@ -465,9 +481,9 @@ class DeletionBot(object):
     def _escape_wikilink(match):
         return '[[:%s]]' % match.group(1)
 
-    @staticmethod
-    def output(message):
-        print time.strftime('[%Y-%m-%d %H:%M:%S]'), message.encode('utf-8')
+    #@staticmethod
+    #def output(message):
+    #    print time.strftime('[%Y-%m-%d %H:%M:%S]'), message.encode('utf-8')
 
 if __name__ == '__main__':
 
