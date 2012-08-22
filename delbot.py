@@ -1,17 +1,24 @@
 #encoding=utf-8
 from __future__ import unicode_literals
+from wp_private import botlogin, maillogin,mailaddr
+
+import logging
+import logging.handlers
+smtp_handler = logging.handlers.SMTPHandler(mailhost=("smtp.gmail.com", 587), 
+        fromaddr=mailaddr, toaddrs=mailaddr, subject=u"[toolserver] SlettNomBot crashed!",
+        credentials=maillogin, secure=())
+logger = logging.getLogger()
+logger.addHandler(smtp_handler)
+
 import mwclient
- 
 import re
 import time, datetime
 import locale
-
-import locale
-locale.setlocale(locale.LC_TIME, 'no_NO.utf-8'.encode('utf-8'))
+locale.setlocale(locale.LC_TIME, 'nb_NO.UTF-8'.encode('utf-8'))
+# except locale.Error:
 
 import sqlite3
 
-from wp_private import botlogin
 from danmicholoparser import DanmicholoParser
 
 """
@@ -198,7 +205,7 @@ class DeletionBot(object):
         dp = DanmicholoParser(text)
         decisions = []
         for t_name, tpls in dp.templates.iteritems():
-            if t_name in ['beholdt', 'flettet', 'flyttet', 'hurtigsletta', 'hurtigslettet', 'ny slettenominering', 'omdirigert', 'slettet']:
+            if t_name in ['beholdt', 'flettet', 'flyttet', 'hurtigsletta', 'hurtigslettet', 'ny slettenominering', 'omdirigert', 'slettet', 'sletta']:
                 for t in tpls:
                     decisions.append([t.begin, t_name])
         decisions.sort(key = lambda x: x[0])
@@ -219,7 +226,7 @@ class DeletionBot(object):
                 status = 'hs'
             elif decisions[-1] == 'omdirigert':
                 status = 'o'
-            elif decisions[-1] == 'slettet':
+            elif decisions[-1] == 'slettet' or decisions[-1] == 'sletta':
                 status = 's'
 
         # Checking for closedness
@@ -463,9 +470,14 @@ class DeletionBot(object):
         print time.strftime('[%Y-%m-%d %H:%M:%S]'), message.encode('utf-8')
 
 if __name__ == '__main__':
-    import sys, os
-    os.chdir(os.path.abspath(os.path.dirname(__file__)))
 
-    dr = DeletionBot()
-    dr.run()
+    try:
 
+        import sys, os
+        os.chdir(os.path.abspath(os.path.dirname(__file__)))
+
+        dr = DeletionBot()
+        dr.run()
+
+    except Exception as e:
+        logger.exception('Unhandled Exception')
