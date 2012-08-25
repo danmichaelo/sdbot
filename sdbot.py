@@ -12,7 +12,7 @@ runstart = datetime.now()
 
 import platform
 pv = platform.python_version()
-f = open('slettnombot.log','a')
+f = open('sdbot.log','a')
 f.write('python v. %s, logging v. %s\n' % (pv, logging.__version__))
 f.close()
 
@@ -22,12 +22,12 @@ formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 
 smtp_handler = logging.handlers.SMTPHandler( mailhost = ('localhost', 25),
                 fromaddr = mailfrom, toaddrs = mailto, 
-                subject=u"[toolserver] SlettNomBot crashed!")
+                subject=u"[toolserver] SDBot crashed!")
                 
 smtp_handler.setLevel(logging.ERROR)
 logger.addHandler(smtp_handler)
 
-file_handler = logging.FileHandler('slettnombot.log')
+file_handler = logging.FileHandler('sdbot.log')
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
