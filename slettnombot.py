@@ -1,17 +1,29 @@
 #encoding=utf-8
+# python version 2.6.6, logging version 0.5.0.5 at nightshade
+# python version 2.7.1, logging version 0.5.1.2 at willow
 from __future__ import unicode_literals
-from wp_private import botlogin, maillogin,mailaddr
+from wp_private import sdbotlogin, mailfrom, mailto
 
 import logging
 import logging.handlers
+
+from datetime import datetime
+runstart = datetime.now()
+
+import platform
+pv = platform.python_version()
+f = open('slettnombot.log','a')
+f.write('python v. %s, logging v. %s\n' % (pv, logging.__version__))
+f.close()
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 
-smtp_handler = logging.handlers.SMTPHandler(mailhost=("smtp.gmail.com", 587), 
-                fromaddr=mailaddr, toaddrs=mailaddr, subject=u"[toolserver] SlettNomBot crashed!",
-                credentials=maillogin, secure=())
+smtp_handler = logging.handlers.SMTPHandler( mailhost = ('localhost', 25),
+                fromaddr = mailfrom, toaddrs = mailto, 
+                subject=u"[toolserver] SlettNomBot crashed!")
+                
 smtp_handler.setLevel(logging.ERROR)
 logger.addHandler(smtp_handler)
 
@@ -20,14 +32,18 @@ file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
+def total_seconds(td):
+    # for backwards compability. td is a timedelta object
+    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
+
 #console_handler = logging.StreamHandler()
 #console_handler.setLevel(logging.INFO)
 #console_handler.setFormatter(formatter)
 #logger.addHandler(console_handler)
 
+
 import mwclient
 import re
-import time, datetime
 import locale
 locale.setlocale(locale.LC_TIME, 'nb_NO.UTF-8'.encode('utf-8'))
 # except locale.Error:
@@ -49,8 +65,8 @@ class DeletionBot(object):
         self.simulate = False
 
         self.site = mwclient.Site('no.wikipedia.org')
-        self.site.login(*botlogin)
-        self.today = datetime.datetime.utcnow()
+        self.site.login(*sdbotlogin)
+        self.today = datetime.utcnow()
 
         self.archival_threshold = 86400
         #self.closure_threshold = 86400
@@ -247,17 +263,17 @@ class DeletionBot(object):
         # Checking for closedness
         if status != '': 
             last_rev = page.revisions(limit = 1).next()
-            timedelta = self.today - datetime.datetime(*last_rev.get('timestamp')[:6])
-            logger.info('    Status: %s, delta: %.f s' % (status, timedelta.total_seconds()))
+            timedelta = self.today - datetime(*last_rev.get('timestamp')[:6])
+            logger.info('    Status: %s, delta: %.f s' % (status, total_seconds(timedelta)))
 
             if status == 'b':
                 page_subject = self.site.Pages[subject]
                 firstrev = page.revisions(dir = 'newer', limit = 1).next()
-                nomdate = time.strftime('%Y-%m-%d', firstrev['timestamp'])
+                nomdate = datetime.strftime('%Y-%m-%d', firstrev['timestamp'])
                 self.insert_kept(name, page, page_subject, nomdate)
                 self.remove_template(name, page, page_subject)
 
-            if timedelta.total_seconds() >= self.archival_threshold:
+            if total_seconds(timedelta) >= self.archival_threshold:
                 # Check whether the last user was an admin
                 if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
                     logger.info('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
@@ -273,7 +289,7 @@ class DeletionBot(object):
             #    logevents = self.site.logevents(type = 'delete', title = subject)
             #    for event in logevents:
             #        if event['action'] == 'delete':
-            #            timedelta = datetime.datetime.utcnow() - datetime.datetime(*event['timestamp'][:6])
+            #            timedelta = datetime.utcnow() - datetime(*event['timestamp'][:6])
             #            if (timedelta.seconds + timedelta.days * 86400) >= self.closure_threshold:
             #                self.output('Closing %s' % name)
             #                #text = '{{delh}}\n' + text
@@ -292,7 +308,7 @@ class DeletionBot(object):
     #    if self.cursor.fetchone(): return
 
     #    revisions = page.revisions(dir = 'newer', limit = 1, prop = 'timestamp')
-    #    timedelta = datetime.datetime.utcnow() - datetime.datetime(*revisions.next()['timestamp'][:6])
+    #    timedelta = datetime.utcnow() - datetime(*revisions.next()['timestamp'][:6])
 
     #    if (timedelta.seconds + timedelta.days * 86400) >= self.notification_timeout:
     #        self.cursor.execute("""INSERT INTO notifications VALUES
@@ -449,7 +465,7 @@ class DeletionBot(object):
     def save_not_admin_closed(self):
         listing = ['* [[:%s]] lukket av [[Bruker:%s|]] on %04i-%02i-%02i %02i:%02i:%02i' % \
                 ((page_name, rev.get('user', '')) + rev['timestamp'][:6]) for page_name, rev in self.not_admin_closed]
-        summary = '%s: %s diskusjoner' % (time.strftime('%Y-%m-%d'), len(listing))
+        summary = '%s: %s diskusjoner' % (datetime.now().strftime('%Y-%m-%d'), len(listing))
 
         if listing:
             page = self.site.Pages['Bruker:DanmicholoBot/non-admin']
@@ -461,7 +477,6 @@ class DeletionBot(object):
                 page.save(text, summary)
 
     def run(self, iterator = None):
-        logger.info('============= This is SlettNomBot running ================')
         self.read_listing()
         self.save_not_admin_closed()
 
@@ -494,6 +509,11 @@ if __name__ == '__main__':
 
         dr = DeletionBot()
         dr.run()
+    
+        runend = datetime.now()
+        runtime = total_seconds(runend - runstart)
+        logger.info('Runtime was %.f seconds.' % (runtime))
 
     except Exception as e:
         logger.exception('Unhandled Exception')
+
