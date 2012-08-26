@@ -41,11 +41,9 @@ def total_seconds(td):
 #console_handler.setFormatter(formatter)
 #logger.addHandler(console_handler)
 
-
 import mwclient
 import re
 import locale
-locale.setlocale(locale.LC_TIME, 'nb_NO.UTF-8'.encode('utf-8'))
 # except locale.Error:
 
 import sqlite3
@@ -59,7 +57,7 @@ CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,
     deletion_request TEXT);
 """
 
-class DeletionBot(object):
+class SDBot(object):
 
     def __init__(self):
         self.simulate = False
@@ -93,7 +91,7 @@ class DeletionBot(object):
 
         page = self.site.Pages['Wikipedia:Sletting']
 
-        logger.info('Reading deletion requests')
+        #logger.info('Reading deletion requests')
 
         monthyear = self.today.strftime('%B %Y') # e.g. "januar 2012"
 
@@ -206,14 +204,14 @@ class DeletionBot(object):
         if not page.exists: 
             return False
 
-        logger.info('Sjekker %s' % name)
+        logger.info('<> %s' % name[19:])
 
         text = page.edit()
         # Find all headings
         headings = self.r_h3_heading.findall(text)
         # Either malformed or a mass deletion request
         if len(headings) != 1: 
-            logger.warning('  either malformed or a mass deletion request, found %d h3 headers' % len(headings))
+            logger.warning('   either malformed or a mass deletion request, found %d h3 headers' % len(headings))
             return False
 
         # Find the subject
@@ -221,13 +219,13 @@ class DeletionBot(object):
 
         # Malformed
         if not m_subject: 
-            logger.warning('  malformed header: "%s" does not match "%s"' % (headings[0], m_subject))
+            logger.warning('   malformed header: "%s" does not match "%s"' % (headings[0], m_subject))
             return False
         subject = self.normalize_title(m_subject.group(1))
         
         # Wrong heading
         if not re.search(ur'(?i)^Wikipedia\:Sletting\/%s$' % re.escape(subject), name): 
-            logger.warning('  malformed header: "%s" , "%s"' % (name, subject))
+            logger.warning('   malformed header: "%s" , "%s"' % (name, subject))
             return False
 
         #self.notify_uploaders(page, subject)
@@ -245,7 +243,7 @@ class DeletionBot(object):
         # Check last decision
         status = ''
         if len(decisions) > 0:
-            logger.info('Fant %d avgjørelser: %s' % (len(decisions), ', '.join(decisions)))
+            logger.info('   Fant %d avgjørelse(r): %s' % (len(decisions), ', '.join(decisions)))
 
             if decisions[-1] == 'beholdt':
                 status = 'b'
@@ -264,12 +262,12 @@ class DeletionBot(object):
         if status != '': 
             last_rev = page.revisions(limit = 1).next()
             timedelta = self.today - datetime(*last_rev.get('timestamp')[:6])
-            logger.info('    Status: %s, delta: %.f s' % (status, total_seconds(timedelta)))
+            logger.info('   Status: %s, delta: %.f s' % (status, total_seconds(timedelta)))
 
             if status == 'b':
                 page_subject = self.site.Pages[subject]
                 firstrev = page.revisions(dir = 'newer', limit = 1).next()
-                nomdate = datetime.strftime('%Y-%m-%d', firstrev['timestamp'])
+                nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
                 self.insert_kept(name, page, page_subject, nomdate)
                 self.remove_template(name, page, page_subject)
 
@@ -278,7 +276,7 @@ class DeletionBot(object):
                 if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
                     logger.info('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
                     self.not_admin_closed.append((page.name, last_rev))
-                logger.info('    Merker for arkivering')
+                logger.info('   Merker for arkivering')
                 return { 'archive': True, 'status': status }
             else:
                 return { 'archive': False, 'status': status }
@@ -389,10 +387,10 @@ class DeletionBot(object):
             talk_page = self.site.Pages[self.get_talk(page_subject)]
             backlinks = page_nom.backlinks(generator = False)
             if talk_page.name in backlinks:
-                logger.debug('  Deletion request is already backlinked')
+                logger.debug('   Ikke behov for å sette inn {{Sletting-Beholdt}}')
                 return
 
-            logger.info('Inserting keep to %s' % page_subject.name)
+            logger.info('   Setter inn {{Sletting-beholdt}} på %s' % page_subject.name)
 
             kept = '{{Sletting-beholdt | %s | %s }}' % (nomination_date, name)
 
@@ -410,7 +408,7 @@ class DeletionBot(object):
                     try:
                         self.site.wait(wait_token)
                     except mwclient.MaximumRetriesExceeded:
-                        return logger.error('Unable to save page!')
+                        return logger.error('   Unable to save page!')
                 else:
                     return True
 
@@ -418,7 +416,7 @@ class DeletionBot(object):
 
         backlinks = page_nom.backlinks(generator = False)
         if page_subject.name in backlinks:
-            logger.info('Fjerner {{Sletting}} fra %s' % page_subject.name)
+            logger.info('   Fjerner {{Sletting}} fra %s' % page_subject.name)
 
             text = page_subject.edit()
             try:
@@ -506,8 +504,15 @@ if __name__ == '__main__':
 
         import sys, os
         os.chdir(os.path.abspath(os.path.dirname(__file__)))
+        
+        for loc in ['no_NO', 'nb_NO.utf8']:
+            try:
+                locale.setlocale(locale.LC_ALL, loc.encode('utf-8'))
+                logger.info('Locale set to %s' % loc)
+            except locale.Error:
+                pass
 
-        dr = DeletionBot()
+        dr = SDBot()
         dr.run()
     
         runend = datetime.now()
