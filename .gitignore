@@ -1,3 +1,4 @@
 *.swp
 *.pyc
+*.log
 wp_private.py
