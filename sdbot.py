@@ -262,24 +262,26 @@ class SDBot(object):
         if status != '': 
             last_rev = page.revisions(limit = 1).next()
             timedelta = self.today - datetime(*last_rev.get('timestamp')[:6])
-            logger.info('   Status: %s, delta: %.f s' % (status, total_seconds(timedelta)))
-
-            if status == 'b':
-                page_subject = self.site.Pages[subject]
-                firstrev = page.revisions(dir = 'newer', limit = 1).next()
-                nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
-                self.insert_kept(name, page, page_subject, nomdate)
-                self.remove_template(name, page, page_subject)
-
-            if total_seconds(timedelta) >= self.archival_threshold:
-                # Check whether the last user was an admin
-                if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
-                    logger.info('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
-                    self.not_admin_closed.append((page.name, last_rev))
-                logger.info('   Merker for arkivering')
-                return { 'archive': True, 'status': status }
+            
+            # Check whether the last user was an admin
+            if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
+                logger.info('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
+                self.not_admin_closed.append((page.name, last_rev))
             else:
-                return { 'archive': False, 'status': status }
+                logger.info('   Status: %s, delta: %.f s' % (status, total_seconds(timedelta)))
+
+                if status == 'b':
+                    page_subject = self.site.Pages[subject]
+                    firstrev = page.revisions(dir = 'newer', limit = 1).next()
+                    nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
+                    self.insert_kept(name, page, page_subject, nomdate)
+                    self.remove_template(name, page, page_subject)
+
+                if total_seconds(timedelta) >= self.archival_threshold:
+                    logger.info('   Merker for arkivering')
+                    return { 'archive': True, 'status': status }
+                else:
+                    return { 'archive': False, 'status': status }
         #else:
             # Closing if deleted
             #page_subject = self.site.Pages[subject]
@@ -461,12 +463,12 @@ class SDBot(object):
     #    self.database.commit()
 
     def save_not_admin_closed(self):
-        listing = ['* [[:%s]] lukket av [[Bruker:%s|]] on %04i-%02i-%02i %02i:%02i:%02i' % \
+        listing = ['* [[:%s]] lukket av [[Bruker:%s|]] den %04i-%02i-%02i %02i:%02i:%02i' % \
                 ((page_name, rev.get('user', '')) + rev['timestamp'][:6]) for page_name, rev in self.not_admin_closed]
         summary = '%s: %s diskusjoner' % (datetime.now().strftime('%Y-%m-%d'), len(listing))
 
         if listing:
-            page = self.site.Pages['Bruker:DanmicholoBot/non-admin']
+            page = self.site.Pages['Bruker:SDBot/ikke-admin']
             text = page.edit()
             text += '\n\n== ~~~~~ ==\n%s' % '\n'.join(listing)
             if self.simulate:
