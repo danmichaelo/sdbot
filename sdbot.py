@@ -66,7 +66,7 @@ class SDBot(object):
         self.site.login(*sdbotlogin)
         self.today = datetime.utcnow()
 
-        self.archival_threshold = 86400
+        self.archival_threshold = 86400*3
         #self.closure_threshold = 86400
         #self.notification_timeout = 86400
 
