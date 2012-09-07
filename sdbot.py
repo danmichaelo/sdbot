@@ -32,6 +32,11 @@ file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
+warn_handler = logging.FileHandler('warnings.log')
+warn_handler.setLevel(logging.WARNING)
+warn_handler.setFormatter(formatter)
+logger.addHandler(warn_handler)
+
 def total_seconds(td):
     # for backwards compability. td is a timedelta object
     return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
@@ -56,6 +61,124 @@ CREATE TABLE deletion_request_list (id INTEGER PRIMARY KEY AUTOINCREMENT,
 CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,
     deletion_request TEXT);
 """
+1/0
+class DeletionRequest(object):
+    
+    @staticmethod
+    def normalize_title(title):
+        title = title.strip(' \t\r\n_').replace('_', ' ')
+        while title.count('  '):
+            title = title.replace('  ', ' ')
+        return title[0].upper() + title[1:]
+
+    r_h3_heading = re.compile(ur'^\s*\=\=\=\s*(.*?)\s*\=\=\=\s*$', re.MULTILINE)
+    r_link = re.compile(ur'\[\[[: ]*(.*?)\s*\]\]')
+    def __init__(self, page):
+
+        name = page.title
+
+        # Deletion request does not exist
+        if not page.exists: 
+            return False
+
+        logger.info('<> %s' % name[19:])
+
+        text = page.edit()
+        # Find all headings
+        headings = self.r_h3_heading.findall(text)
+        # Malformed request
+        if len(headings) != 1: 
+            logger.warning('!! %s: Fant %d h3-overskrifter' % (page.name, len(headings)))
+            return False
+
+        # Find the subject
+        m_subjects = self.r_link.findall(headings[0])
+        if len(m_subjects) != 1: 
+            logger.warning('!! %s: Fant %d lenker i overskriften' % (page.name, len(m_subjects)))
+            return False
+
+        subject = self.normalize_title(m_subjects[0])
+        
+        # Wrong heading
+        if not re.search(ur'(?i)^Wikipedia\:Sletting\/%s$' % re.escape(subject), name): 
+            logger.warning('!! %s: Overskriften "%s" matcher ikke URL-elementet "%s"' % (page.name, subject, name))
+            return False
+
+        #self.notify_uploaders(page, subject)
+
+        # Find all decisive templates
+        dp = DanmicholoParser(text)
+        decisions = []
+        for t_name, tpls in dp.templates.iteritems():
+            if t_name in ['beholdt', 'flettet', 'flyttet', 'hurtigsletta', 'hurtigslettet', 'ny slettenominering', 'omdirigert', 'slettet', 'sletta']:
+                for t in tpls:
+                    decisions.append([t.begin, t_name])
+        decisions.sort(key = lambda x: x[0])
+        decisions = [d[1] for d in decisions]
+
+        # Check last decision
+        status = ''
+        if len(decisions) > 0:
+            logger.info('   Fant %d avgjørelse(r): %s' % (len(decisions), ', '.join(decisions)))
+
+            if decisions[-1] == 'beholdt':
+                status = 'b'
+            elif decisions[-1] == 'flettet':
+                status = 'f'
+            elif decisions[-1] == 'flyttet':
+                status = 'y'
+            elif decisions[-1] == 'hurtigsletta' or decisions[-1] == 'hurtigslettet':
+                status = 'hs'
+            elif decisions[-1] == 'omdirigert':
+                status = 'o'
+            elif decisions[-1] == 'slettet' or decisions[-1] == 'sletta':
+                status = 's'
+
+        # Checking for closedness
+        if status != '': 
+            last_rev = page.revisions(limit = 1).next()
+            timedelta = self.today - datetime(*last_rev.get('timestamp')[:6])
+            
+            # Check whether the last user was an admin
+            if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
+                logger.warning('   %s ble avsluttet, eller redigert etter avslutning, av %s, som ikke er admin' % (page.name, last_rev.get('user')))
+                #self.not_admin_closed.append((page.name, last_rev))
+            else:
+                ts = total_seconds(timedelta)
+                logger.info('   Status: %s, delta: %.f s (%.1f h gjenstår til arkivering)' % (status, ts, (self.archival_threshold-ts)/3600.))
+
+                if status == 'b':
+                    page_subject = self.site.Pages[subject]
+                    firstrev = page.revisions(dir = 'newer', limit = 1).next()
+                    nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
+                    self.insert_kept(name, page, page_subject, nomdate)
+                    self.remove_template(name, page, page_subject)
+
+                if ts >= self.archival_threshold:
+                    logger.info('   Merker for arkivering')
+                    return { 'archive': True, 'status': status }
+                else:
+                    return { 'archive': False, 'status': status }
+        #else:
+            # Closing if deleted
+            #page_subject = self.site.Pages[subject]
+            #if not page_subject.exists:
+            #    logevents = self.site.logevents(type = 'delete', title = subject)
+            #    for event in logevents:
+            #        if event['action'] == 'delete':
+            #            timedelta = datetime.utcnow() - datetime(*event['timestamp'][:6])
+            #            if (timedelta.seconds + timedelta.days * 86400) >= self.closure_threshold:
+            #                self.output('Closing %s' % name)
+            #                #text = '{{delh}}\n' + text
+            #                text += "\n----\n{{Slettet}} av [[Bruker:%s|]]: ''%s''" % \
+            #                    (event['user'], self.escape_wikilinks(event.get('comment', '').replace('{{', '<nowiki>{{</nowiki>')))
+            #                try:
+            #                    page.save(text, summary = 'Avslutter slettediskusjon; resultatet var slett')
+            #                except mwclient.EditError, e:
+            #                    self.output('Failed to close deletion request: %s' % e)
+            #                return False
+        return False
+
 
 class SDBot(object):
 
@@ -70,8 +193,8 @@ class SDBot(object):
         #self.closure_threshold = 86400
         #self.notification_timeout = 86400
 
-        #self.database = sqlite3.connect('delbot.db')
-        #self.cursor = self.database.cursor()
+        self.database = sqlite3.connect('sdbot.db')
+        self.cursor = self.database.cursor()
 
         #page = self.site.Pages['User:%s/notification-blacklist' % self.site.username]
         #text = page.edit(readonly = True)
@@ -83,7 +206,6 @@ class SDBot(object):
         page.get_token('edit', True)
 
         self.admins = [i['name'] for i in self.site.allusers(group = 'sysop')]
-        self.not_admin_closed = []
 
     r_deletion_request = re.compile(ur'\{\{[Ss]letteforslag[\s]*\|(.*?)(?:\|.*?)?\}\}')
     r_h2_heading = re.compile(ur'^\s*\=\=\s*(.*?)\s*\=\=\s*$', re.MULTILINE)
@@ -108,7 +230,7 @@ class SDBot(object):
         archive_kept = []
         archive_deleted = []
         for request in deletion_requests[:]:
-            archived = self.read_deletion_request('Wikipedia:Sletting/' + request)
+            archived = DeletionRequest(self.site.pages['Wikipedia:Sletting/' + request])
             if archived:
                 statuses[request] = archived['status']
                 if archived['archive']:
@@ -195,112 +317,12 @@ class SDBot(object):
         else:
             page.save(text, summary = summary)
 
-    r_h3_heading = re.compile(ur'^\s*\=\=\=\s*(.*?)\s*\=\=\=\s*$', re.MULTILINE)
-    r_link = re.compile(ur'^\[\[[: ]*(.*)\s*\]\]$')
-    def read_deletion_request(self, name):
-        page = self.site.Pages[name]
+        # Save to DB
+        data = [request, ]
+        cur.execute(u'''INSERT INTO sdbot (name, open_date, close_date, open_user, close_user, decision, archive)
+                    VALUES(?,?,?,?,?,?,?)''', data)
+        self.sql.commit()
 
-        # Deletion request does not exist
-        if not page.exists: 
-            return False
-
-        logger.info('<> %s' % name[19:])
-
-        text = page.edit()
-        # Find all headings
-        headings = self.r_h3_heading.findall(text)
-        # Either malformed or a mass deletion request
-        if len(headings) != 1: 
-            logger.warning('   either malformed or a mass deletion request, found %d h3 headers' % len(headings))
-            return False
-
-        # Find the subject
-        m_subject = self.r_link.search(headings[0])
-
-        # Malformed
-        if not m_subject: 
-            logger.warning('   malformed header: "%s" does not match "%s"' % (headings[0], m_subject))
-            return False
-        subject = self.normalize_title(m_subject.group(1))
-        
-        # Wrong heading
-        if not re.search(ur'(?i)^Wikipedia\:Sletting\/%s$' % re.escape(subject), name): 
-            logger.warning('   malformed header: "%s" , "%s"' % (name, subject))
-            return False
-
-        #self.notify_uploaders(page, subject)
-
-        # Find all decisive templates
-        dp = DanmicholoParser(text)
-        decisions = []
-        for t_name, tpls in dp.templates.iteritems():
-            if t_name in ['beholdt', 'flettet', 'flyttet', 'hurtigsletta', 'hurtigslettet', 'ny slettenominering', 'omdirigert', 'slettet', 'sletta']:
-                for t in tpls:
-                    decisions.append([t.begin, t_name])
-        decisions.sort(key = lambda x: x[0])
-        decisions = [d[1] for d in decisions]
-
-        # Check last decision
-        status = ''
-        if len(decisions) > 0:
-            logger.info('   Fant %d avgjørelse(r): %s' % (len(decisions), ', '.join(decisions)))
-
-            if decisions[-1] == 'beholdt':
-                status = 'b'
-            elif decisions[-1] == 'flettet':
-                status = 'f'
-            elif decisions[-1] == 'flyttet':
-                status = 'y'
-            elif decisions[-1] == 'hurtigsletta' or decisions[-1] == 'hurtigslettet':
-                status = 'hs'
-            elif decisions[-1] == 'omdirigert':
-                status = 'o'
-            elif decisions[-1] == 'slettet' or decisions[-1] == 'sletta':
-                status = 's'
-
-        # Checking for closedness
-        if status != '': 
-            last_rev = page.revisions(limit = 1).next()
-            timedelta = self.today - datetime(*last_rev.get('timestamp')[:6])
-            
-            # Check whether the last user was an admin
-            if last_rev.get('user') not in self.admins and last_rev.get('user') != self.site.username:
-                logger.info('%s was closed by %s who is not an admin' % (page.name, last_rev.get('user')))
-                self.not_admin_closed.append((page.name, last_rev))
-            else:
-                logger.info('   Status: %s, delta: %.f s' % (status, total_seconds(timedelta)))
-
-                if status == 'b':
-                    page_subject = self.site.Pages[subject]
-                    firstrev = page.revisions(dir = 'newer', limit = 1).next()
-                    nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
-                    self.insert_kept(name, page, page_subject, nomdate)
-                    self.remove_template(name, page, page_subject)
-
-                if total_seconds(timedelta) >= self.archival_threshold:
-                    logger.info('   Merker for arkivering')
-                    return { 'archive': True, 'status': status }
-                else:
-                    return { 'archive': False, 'status': status }
-        #else:
-            # Closing if deleted
-            #page_subject = self.site.Pages[subject]
-            #if not page_subject.exists:
-            #    logevents = self.site.logevents(type = 'delete', title = subject)
-            #    for event in logevents:
-            #        if event['action'] == 'delete':
-            #            timedelta = datetime.utcnow() - datetime(*event['timestamp'][:6])
-            #            if (timedelta.seconds + timedelta.days * 86400) >= self.closure_threshold:
-            #                self.output('Closing %s' % name)
-            #                #text = '{{delh}}\n' + text
-            #                text += "\n----\n{{Slettet}} av [[Bruker:%s|]]: ''%s''" % \
-            #                    (event['user'], self.escape_wikilinks(event.get('comment', '').replace('{{', '<nowiki>{{</nowiki>')))
-            #                try:
-            #                    page.save(text, summary = 'Avslutter slettediskusjon; resultatet var slett')
-            #                except mwclient.EditError, e:
-            #                    self.output('Failed to close deletion request: %s' % e)
-            #                return False
-        return False
 
     #def notify_uploaders(self, page, subject):
     #    self.cursor.execute("""SELECT 1 FROM notifications WHERE
@@ -462,23 +484,9 @@ class SDBot(object):
     #        day = ?""", (year, month, day))
     #    self.database.commit()
 
-    def save_not_admin_closed(self):
-        listing = ['* [[:%s]] lukket av [[Bruker:%s|]] den %04i-%02i-%02i %02i:%02i:%02i' % \
-                ((page_name, rev.get('user', '')) + rev['timestamp'][:6]) for page_name, rev in self.not_admin_closed]
-        summary = '%s: %s diskusjoner' % (datetime.now().strftime('%Y-%m-%d'), len(listing))
-
-        if listing:
-            page = self.site.Pages['Bruker:SDBot/ikke-admin']
-            text = page.edit()
-            text += '\n\n== ~~~~~ ==\n%s' % '\n'.join(listing)
-            if self.simulate:
-                print "Skipping in simulate-mode"
-            else:
-                page.save(text, summary)
 
     def run(self, iterator = None):
         self.read_listing()
-        self.save_not_admin_closed()
 
     @staticmethod
     def normalize_title(title):
