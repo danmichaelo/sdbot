@@ -166,8 +166,8 @@ class DeletionRequest(object):
                 ts = total_seconds(timedelta)
                 logger.info('   Status: %s, delta: %.f s (%.1f h gjenstår til arkivering)' % (self.status, ts, (self.archival_threshold-ts)/3600.))
 
-                if self.status == 'b':
-                    page_subject = site.Pages[self.subject]
+                if self.status == 'b' or self.status == 'y':
+                    page_subject = site.Pages[self.subject].resolve_redirect()
                     firstrev = page.revisions(dir = 'newer', limit = 1).next()
                     nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
                     self.insert_kept(name, page, page_subject, nomdate)
@@ -246,7 +246,7 @@ class DeletionRequest(object):
 
     def remove_template(self, name, page_nom, page_subject):
 
-        backlinks = page_nom.backlinks(generator = False)
+        backlinks = page_nom.backlinks(generator = False, redirect = True)
         if page_subject.name in backlinks:
             logger.info('   Fjerner {{Sletting}} fra %s' % page_subject.name)
 
