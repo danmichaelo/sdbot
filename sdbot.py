@@ -146,11 +146,36 @@ class DeletionRequest(object):
             elif decisions[-1] == 'flettet':
                 self.status = 'f'
             elif decisions[-1] == 'flyttet':
+                if len(self.subjects) != 1:
+                    logger.warning('!! Vet ikke hvordan jeg skal tolke flytting når flere sider er nominert samtidig')
+                    return
+
                 self.status = 'y'
+                mto = dp.templates['flyttet'][0].parameters[1]
+                if not no.pages[mto].exists:
+                    logger.warning('   "%s" er merket som flyttet til "%s, men siden eksisterer ikke!"', self.subjects[0], mto)
+                else:
+                    logger.info('   "%s" er merket som flyttet til "%s"', self.subjects[0], mto)
+                    page_redir = self.site.Pages['Wikipedia:Sletting/%s' % mto]
+                    if not page_redir.exists:
+                        txt = page_redir.edit()
+                        if len(txt) == 0:
+                            logger.info('   Lager omdirigering fra "%s" til "%s"', mto, self.subjects[0])
+                            txt = '#OMDIRIGERING [[%s]]' % self.subjects[0]
+                            page_redir.save(txt, summary = 'Lager omdirigering til [[%s]]' % self.subjects[0]
+
+                    self.subjects[0] = mto
+
             elif decisions[-1] == 'hurtigsletta' or decisions[-1] == 'hurtigslettet':
                 self.status = 'hs'
             elif decisions[-1] == 'omdirigert':
+                #if len(self.subjects) != 1:
+                #    logger.warning('!! Vet ikke hvordan jeg skal tolke omdirigering når flere sider er nominert samtidig')
+                #    return
                 self.status = 'o'
+                #mto = dp.templates['omdirigert'][0].parameters[1]
+                #logger.info('"%s" er merket som omdirigert til "%s"', self.subjects[0], mto)
+                #self.subjects[0] = mto
             elif decisions[-1] == 'slettet' or decisions[-1] == 'sletta':
                 self.status = 's'
 
@@ -175,7 +200,11 @@ class DeletionRequest(object):
                 logger.warning('   Venter på fjerning av {{sletteforslag avslutning uklar}}')
             else:
                 ts = total_seconds(timedelta)
-                logger.info('   Status: %s, delta: %.f s (%.1f h gjenstår til arkivering)' % (self.status, ts, (self.archival_threshold-ts)/3600.))
+                arkiv = 'slettet'
+                if self.status in ['b','f','y']:
+                    arkiv = 'beholdt'
+                
+                logger.info('   Avsluttet med status: %s. Arkiveres som %s om %.1f timer' % (self.status, arkiv, (self.archival_threshold-ts)/3600.))
 
                 if self.status == 'b' or self.status == 'y':
                     firstrev = page.revisions(dir = 'newer', limit = 1).next()
