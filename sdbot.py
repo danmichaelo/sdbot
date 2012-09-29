@@ -162,7 +162,7 @@ class DeletionRequest(object):
                         if len(txt) == 0:
                             logger.info('   Lager omdirigering fra "%s" til "%s"', mto, self.subjects[0])
                             txt = '#OMDIRIGERING [[%s]]' % self.subjects[0]
-                            page_redir.save(txt, summary = 'Lager omdirigering til [[%s]]' % self.subjects[0]
+                            page_redir.save(txt, summary = 'Lager omdirigering til [[%s]]' % self.subjects[0])
 
                     self.subjects[0] = mto
 
