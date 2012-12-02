@@ -152,17 +152,18 @@ class DeletionRequest(object):
 
                 self.status = 'y'
                 mto = dp.templates['flyttet'][0].parameters[1]
-                if not no.pages[mto].exists:
+                if not site.pages[mto].exists:
                     logger.warning('   "%s" er merket som flyttet til "%s, men siden eksisterer ikke!"', self.subjects[0], mto)
                 else:
                     logger.info('   "%s" er merket som flyttet til "%s"', self.subjects[0], mto)
-                    page_redir = self.site.Pages['Wikipedia:Sletting/%s' % mto]
+                    page_redir = site.Pages['Wikipedia:Sletting/%s' % mto]
                     if not page_redir.exists:
                         txt = page_redir.edit()
                         if len(txt) == 0:
-                            logger.info('   Lager omdirigering fra "%s" til "%s"', mto, self.subjects[0])
-                            txt = '#OMDIRIGERING [[%s]]' % self.subjects[0]
-                            page_redir.save(txt, summary = 'Lager omdirigering til [[%s]]' % self.subjects[0])
+                            redir_target = 'Wikipedia:Sletting/%s' % self.subjects[0]
+                            logger.info('   Lager omdirigering fra "Wikipedia:Sletting/%s" til "%s"', mto, redir_target)
+                            txt = '#OMDIRIGERING [[%s]]' % redir_target
+                            page_redir.save(txt, summary = 'Lager omdirigering til [[%s]]' % redir_target)
 
                     self.subjects[0] = mto
 
