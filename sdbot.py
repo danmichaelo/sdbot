@@ -28,6 +28,8 @@ CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,
 from datetime import datetime
 runstart = datetime.now()
 
+os.chdir(os.path.abspath(os.path.dirname(__file__)))
+
 import platform
 pv = platform.python_version()
 f = open('sdbot.log','a')
@@ -368,13 +370,13 @@ class SDBot(object):
     r_h2_heading = re.compile(ur'^\s*\=\=\s*(.*?)\s*\=\=\s*$', re.MULTILINE)
     def read_listing(self):
 
+        # Get members of the category:
+        catname = u'Sider som er foreslått slettet'
+        cat = site.categories[catname]
+        catmembers = [c.name for c in cat.members() if c.namespace != 14]
+
+        # Read listing and normalize
         page = site.Pages['Wikipedia:Sletting']
-
-        #logger.info('Reading deletion requests')
-
-        monthyear = self.today.strftime('%B %Y') # e.g. "januar 2012"
-
-        # Read from listing and normalize
         old_text = page.edit(section = 3)
         headings = self.r_h2_heading.findall(old_text)
         if len(headings) != 1 or headings[0].lower().find('liste over slettingskandidater') == -1:
@@ -383,9 +385,20 @@ class SDBot(object):
         deletion_requests = map(self.normalize_title, self.r_deletion_request.findall(re.sub('<\!--.+?-->', '', old_text)))
         deletion_requests = [[arg.strip() for arg in request.split('|')] for request in deletion_requests]
         deletion_requests = [filter(lambda x: x not in ['','hs','s','b', 'f', 'y', 'o'], request) for request in deletion_requests]
-        statuses = {}
+
+        # Compare
+        flatlist = [item for sublist in deletion_requests for item in sublist]
+        notlisted = list(set(catmembers).difference(set(flatlist)))
+        if len(notlisted) != 0:
+            logger.info('Found %d pages in %s not listed on WP:S', len(notlisted), catname)
+            for pagename in notlisted:
+                logger.info('  - %s', pagename)
+                page = site.pages[u'Wikipedia:Sletting/' + pagename]
+                # if page.exists:
+                    # logger.info('     - exists')
 
         # Loop over the requests
+        statuses = {}
         summary = []
         archive_kept = []
         archive_deleted = []
@@ -405,6 +418,8 @@ class SDBot(object):
                     archive_kept.append(dr)
                 else:
                     archive_deleted.append(dr)
+
+        monthyear = self.today.strftime('%B %Y') # e.g. "januar 2012"
 
         if archive_kept or archive_deleted:
             summary_arc = []
@@ -619,9 +634,8 @@ if __name__ == '__main__':
                 console_handler.setLevel(logging.INFO)
             console_handler.setFormatter(formatter)
             logger.addHandler(console_handler)
+            logger.info('Starting in simulate-mode')
 
-
-        os.chdir(os.path.abspath(os.path.dirname(__file__)))
         
         for loc in ['no_NO', 'nb_NO.utf8']:
             try:
