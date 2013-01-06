@@ -4,8 +4,10 @@
 from __future__ import unicode_literals
 from wp_private import sdbotlogin, mailfrom, mailto
 
+import sys, os
 import logging
 import logging.handlers
+import argparse
 
 import mwclient
 import re
@@ -43,32 +45,15 @@ formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 #smtp_handler.setLevel(logging.ERROR)
 #logger.addHandler(smtp_handler)
 
-file_handler = logging.handlers.RotatingFileHandler('sdbot.log', maxBytes=100000, backupCount=3)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-warn_handler = logging.FileHandler('warnings.log')
-warn_handler.setLevel(logging.WARNING)
-warn_handler.setFormatter(formatter)
-logger.addHandler(warn_handler)
-
-site = mwclient.Site('no.wikipedia.org')
-site.login(*sdbotlogin)
-admins = [i['name'] for i in site.allusers(group = 'sysop')]
 
 def total_seconds(td):
     # for backwards compability. td is a timedelta object
     return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
 
-simulate = False
 
-if simulate:
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
+site = mwclient.Site('no.wikipedia.org')
+site.login(*sdbotlogin)
+admins = [i['name'] for i in site.allusers(group = 'sysop')]
 
 class DeletionRequest(object):
     
@@ -91,6 +76,7 @@ class DeletionRequest(object):
         name = page.name
         self.today = datetime.utcnow()
         self.archive = False
+        self.moved_to = ''
         self.status = ''
 
         # Deletion request does not exist
@@ -99,7 +85,9 @@ class DeletionRequest(object):
             return
 
         if page.redirect:
-            logger.warning('!! Nominasjonssiden %s er en omdirigeringsside' % (page.name))
+            target = page.redirects_to().name
+            logger.warning('Nominasjonssiden "%s" har blitt flyttet til "%s"' % (page.name, target))
+            self.moved_to = target
             return
 
         logger.info('<> %s' % ', '.join(self.titles))
@@ -398,11 +386,18 @@ class SDBot(object):
         statuses = {}
 
         # Loop over the requests
+        summary = []
         archive_kept = []
         archive_deleted = []
-        for request in deletion_requests[:]:
+        for n, request in enumerate(deletion_requests[:]):
             dr = DeletionRequest(titles = request, page = site.pages['Wikipedia:Sletting/' + request[0]], simulate = self.simulate)
-            statuses[request[0]] = dr.status
+            if dr.moved_to:
+                summary.append('[[Wikipedia:Sletting/%s]] flyttet' % request[0])
+                moved_to = dr.moved_to.split('/', 1)[1] # skip the Wikipedia:Sletting/ prefix
+                deletion_requests[n][0] = moved_to
+                statuses[moved_to] = dr.status
+            else:
+                statuses[request[0]] = dr.status
             if dr.archive:
                 #self.output('Archiving %s as %s' % (request, archived['status']))
                 deletion_requests.remove(request)
@@ -412,9 +407,9 @@ class SDBot(object):
                     archive_deleted.append(dr)
 
         if archive_kept or archive_deleted:
-            summary = []
+            summary_arc = []
             if archive_kept:
-                summary.append('%d diskusjon%s til [[Wikipedia:Sletting/Beholdt/%s]]' \
+                summary_arc.append('%d diskusjon%s til [[Wikipedia:Sletting/Beholdt/%s]]' \
                         % (len(archive_kept), 'er' if len(archive_kept) > 1 else '', monthyear))
                 # Save to archive
                 wait_token = site.wait_token()
@@ -428,7 +423,7 @@ class SDBot(object):
                     else:
                         break
             if archive_deleted:
-                summary.append('%d diskusjon%s til [[Wikipedia:Sletting/Slettet/%s]]' % \
+                summary_arc.append('%d diskusjon%s til [[Wikipedia:Sletting/Slettet/%s]]' % \
                         (len(archive_deleted), 'er' if len(archive_deleted) > 1 else '', monthyear))
                 # Save to archive
                 wait_token = site.wait_token()
@@ -441,9 +436,11 @@ class SDBot(object):
                         site.wait(wait_token)
                     else:
                         break
-            summary = 'Arkiverer ' + ', '.join(summary)
-        else:
+            summary.append('Arkiverer ' + ', '.join(summary_arc))
+        if len(summary) == 0:
             summary = 'Normaliserer'
+        else:
+            summary = ', '.join(summary)
 
         # Normalize & archive
 
@@ -596,7 +593,34 @@ if __name__ == '__main__':
 
     try:
 
-        import sys, os
+        parser = argparse.ArgumentParser( description = 'The SDBot' )
+        parser.add_argument('--simulate', action='store_true', default=False, help='Do not write results to wiki')
+        parser.add_argument('--debug', action='store_true', default=False, help='More verbose logging')
+        args = parser.parse_args()
+
+        file_handler = logging.handlers.RotatingFileHandler('sdbot.log', maxBytes=100000, backupCount=3)
+        if args.debug:
+            file_handler.setLevel(logging.DEBUG)
+        else:
+            file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+        warn_handler = logging.FileHandler('warnings.log')
+        warn_handler.setLevel(logging.WARNING)
+        warn_handler.setFormatter(formatter)
+        logger.addHandler(warn_handler)
+
+        if args.simulate:
+            console_handler = logging.StreamHandler()
+            if args.debug:
+                console_handler.setLevel(logging.DEBUG)
+            else:
+                console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
+
+
         os.chdir(os.path.abspath(os.path.dirname(__file__)))
         
         for loc in ['no_NO', 'nb_NO.utf8']:
@@ -606,7 +630,7 @@ if __name__ == '__main__':
             except locale.Error:
                 pass
 
-        dr = SDBot(simulate = simulate)
+        dr = SDBot(simulate = args.simulate)
         dr.run()
     
         runend = datetime.now()
