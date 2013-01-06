@@ -43,7 +43,7 @@ formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 #smtp_handler.setLevel(logging.ERROR)
 #logger.addHandler(smtp_handler)
 
-file_handler = logging.FileHandler('sdbot.log')
+file_handler = logging.handlers.RotatingFileHandler('sdbot.log', maxBytes=100000, backupCount=3)
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
