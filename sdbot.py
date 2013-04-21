@@ -70,7 +70,7 @@ class DeletionRequest(object):
     r_link = re.compile(ur'\[\[[: ]*(.*?)\s*\]\]')
     def __init__(self, titles, page, simulate = False):
         
-        self.archival_threshold = 86400*3
+        self.archival_threshold = 86400*2
         self.simulate = simulate
 
         self.titles = titles
@@ -379,7 +379,7 @@ class SDBot(object):
         page = site.Pages['Wikipedia:Sletting']
         old_text = page.edit(section = 3)
         headings = self.r_h2_heading.findall(old_text)
-        if len(headings) != 1 or headings[0].lower().find('liste over slettingskandidater') == -1:
+        if len(headings) != 1 or headings[0].lower().find('liste over slettekandidater') == -1:
             raise StandardError('Fant ikke den forventede overskriften på WP:S')
 
         deletion_requests = map(self.normalize_title, self.r_deletion_request.findall(re.sub('<\!--.+?-->', '', old_text)))
@@ -393,7 +393,7 @@ class SDBot(object):
             logger.info('Found %d pages in %s not listed on WP:S', len(notlisted), catname)
             for pagename in notlisted:
                 logger.info('  - %s', pagename)
-                page = site.pages[u'Wikipedia:Sletting/' + pagename]
+                spage = site.pages[u'Wikipedia:Sletting/' + pagename]
                 # if page.exists:
                     # logger.info('     - exists')
 
@@ -459,7 +459,7 @@ class SDBot(object):
 
         # Normalize & archive
 
-        text = '== Liste over slettingskandidater (nyeste øverst) ==\n' \
+        text = '== Liste over slettekandidater (nyeste øverst) ==\n' \
             + '<!--  Legg inn nye {{sletteforslag|<navn på side>}} rett under denne linjen, øverst, ikke nederst -->'
 
         for request in deletion_requests:
