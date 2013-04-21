@@ -1,4 +1,4 @@
-#encoding=utf-
+#encoding=utf-8
 # python version 2.6.6, logging version 0.5.0.5 at nightshade
 # python version 2.7.1, logging version 0.5.1.2 at willow
 from __future__ import unicode_literals
@@ -16,7 +16,7 @@ import locale
 
 import sqlite3
 
-from danmicholoparser import DanmicholoParser
+from danmicholoparser import TemplateEditor
 
 """
 CREATE TABLE deletion_request_list (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,12 +118,14 @@ class DeletionRequest(object):
         #self.notify_uploaders(page, subject)
 
         # Find all decisive templates
-        dp = DanmicholoParser(text)
+        dp = TemplateEditor(text)
         decisions = []
+        n = 0
         for t_name, tpls in dp.templates.iteritems():
-            if t_name in ['beholdt', 'flettet', 'flyttet', 'hurtigsletta', 'hurtigslettet', 'ny slettenominering', 'omdirigert', 'slettet', 'sletta']:
+            if t_name in ['Beholdt', 'Flettet', 'Flyttet', 'Hurtigsletta', 'Hurtigslettet', 'Ny slettenominering', 'Omdirigert', 'Slettet', 'Sletta']:
                 for t in tpls:
-                    decisions.append([t.begin, t_name])
+                    n += 1
+                    decisions.append([n, t_name])
         decisions.sort(key = lambda x: x[0])
         decisions = [d[1] for d in decisions]
 
@@ -131,17 +133,17 @@ class DeletionRequest(object):
         if len(decisions) > 0:
             logger.info('   Fant %d avgjørelse(r): %s' % (len(decisions), ', '.join(decisions)))
 
-            if decisions[-1] == 'beholdt':
+            if decisions[-1] == 'Beholdt':
                 self.status = 'b'
-            elif decisions[-1] == 'flettet':
+            elif decisions[-1] == 'Flettet':
                 self.status = 'f'
-            elif decisions[-1] == 'flyttet':
+            elif decisions[-1] == 'Flyttet':
                 if len(self.subjects) != 1:
                     logger.warning('!! Vet ikke hvordan jeg skal tolke flytting når flere sider er nominert samtidig')
                     return
 
                 self.status = 'y'
-                mto = dp.templates['flyttet'][0].parameters[1]
+                mto = dp.templates['Flyttet'][0].parameters[1]
                 if not site.pages[mto].exists:
                     logger.warning('   "%s" er merket som flyttet til "%s, men siden eksisterer ikke!"', self.subjects[0], mto)
                 else:
@@ -157,9 +159,9 @@ class DeletionRequest(object):
 
                     self.subjects[0] = mto
 
-            elif decisions[-1] == 'hurtigsletta' or decisions[-1] == 'hurtigslettet':
+            elif decisions[-1] == 'Hurtigsletta' or decisions[-1] == 'Hurtigslettet':
                 self.status = 'hs'
-            elif decisions[-1] == 'omdirigert':
+            elif decisions[-1] == 'Omdirigert':
                 #if len(self.subjects) != 1:
                 #    logger.warning('!! Vet ikke hvordan jeg skal tolke omdirigering når flere sider er nominert samtidig')
                 #    return
@@ -167,7 +169,7 @@ class DeletionRequest(object):
                 #mto = dp.templates['omdirigert'][0].parameters[1]
                 #logger.info('"%s" er merket som omdirigert til "%s"', self.subjects[0], mto)
                 #self.subjects[0] = mto
-            elif decisions[-1] == 'slettet' or decisions[-1] == 'sletta':
+            elif decisions[-1] == 'Slettet' or decisions[-1] == 'Sletta':
                 self.status = 's'
 
         # Checking for closedness
@@ -184,11 +186,11 @@ class DeletionRequest(object):
             # Check whether the last user was an admin
             if self.close_user not in admins and self.close_user != site.username:
                 logger.warning('   %s ble avsluttet, eller redigert etter avslutning, av %s, som ikke er admin' % (page.name, self.close_user))
-                if not 'sletteforslag avslutning uklar' in dp.templates:
+                if not 'Sletteforslag avslutning uklar' in dp.templates:
                     self.insert_notadminwarning(page)
                 #self.not_admin_closed.append((page.name, last_rev))
-            elif 'sletteforslag avslutning uklar' in dp.templates:
-                logger.warning('   Venter på fjerning av {{sletteforslag avslutning uklar}}')
+            elif 'Sletteforslag avslutning uklar' in dp.templates:
+                logger.warning('   Venter på fjerning av {{Sletteforslag avslutning uklar}}')
             else:
                 ts = total_seconds(timedelta)
                 arkiv = 'slettet'
@@ -308,19 +310,19 @@ class DeletionRequest(object):
 
             text = page_subject.edit()
             try:
-                dp = DanmicholoParser(text)
-                if 'sletting' in dp.templates:
-                    tpl = dp.templates['sletting'][0]
-                elif 'slett' in dp.templates:
-                    tpl = dp.templates['slett'][0]
-                elif 'slettingfordi' in dp.templates:
-                    tpl = dp.templates['slettingfordi'][0]
+                dp = TemplateEditor(text)
+                if 'Sletting' in dp.templates:
+                    dp.templates['Sletting'][0].remove()
+                elif 'Slett' in dp.templates:
+                    dp.templates['Slett'][0].remove()
+                elif 'Slettingfordi' in dp.templates:
+                    dp.templates['slettingfordi'][0].remove()
                 else:
                     logger.info('  Fant ingen slettemal')
                     return
-                text = text[0:tpl.begin] + text[tpl.end:]
+                text = dp.get_wikitext()
                 text = text.strip()
-                logger.info('  vha. DanmicholoParser')
+                logger.info('  vha. TemplateEditor')
             except:
                 text = re.sub(r'\{\{[Ss]lett.+?\}\}', '', text) # this may fail if template contains subtemplates
                 logger.info('  vha. regexp')
