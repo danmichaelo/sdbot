@@ -16,7 +16,7 @@ import locale
 
 import sqlite3
 
-from danmicholoparser import TemplateEditor
+from mwtemplates import TemplateEditor
 
 """
 CREATE TABLE deletion_request_list (id INTEGER PRIMARY KEY AUTOINCREMENT,
