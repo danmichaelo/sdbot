@@ -1,0 +1,84 @@
+## -*- coding: utf-8; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:et:sw=4:ts=4:sts=4
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+    <meta charset="utf-8" />
+    <title>SDBot</title>
+    <link rel="stylesheet" href="main.css" />
+</head>
+<body>
+    <h1>SDBot</h1>
+    <p>
+        <a href="//no.wikipedia.org/wiki/Bruker:SDBot">SDBot</a> har behandlet ${count} <a href="//no.wikipedia.org/wiki/Wikipedia:Sletting">slettediskusjoner</a> siden ${startdate}.
+    </p>
+    <h2>Statistikk</h2>
+    <table class="wikitable">
+        <thead>
+            <tr>
+                <th>
+                    Måned
+                </th>
+                <th>
+                    Saker åpnet
+                </th>
+                <th>
+                    Saker lukket
+                </th>
+                <th>
+                    Beholdt**
+                </th>
+                <th>
+                    Slettet**
+                </th>
+                <th>
+                    Median sakbehandlingstid*<br />(dager)
+                </th>
+                <th>
+                    Lengste sakbehandlingstider*<br />(dager)
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+        %for row in rows:
+            <tr>
+                <td>
+                    ${row[1]}-${row[0]}
+                </td>
+                <td>
+                    ${row[2]}
+                </td>
+                <td>
+                    ${row[3]}
+                </td>
+                <td>
+                    ${row[4]}
+                </td>
+                <td>
+                    ${row[5]}
+                </td>
+                <td>
+                    ${row[6]}
+                </td>
+                <td>
+                    <a href="${row[8]}">${row[7]}</a>
+                    <a href="${row[10]}">${row[9]}</a>
+                    <a href="${row[12]}">${row[11]}</a>
+                </td>
+            </tr>
+        %endfor
+        </tbody>
+    </table>
+    <div class="tablefooter">
+    * for saker lukket denne måneden<br />
+    ** Beholdt omfatter <em>beholdt</em>, <em>flyttet</em> og <em>flettet</em>. 
+    Slettet omfatter <em>slettet</em>, <em>hurtigslettet</em> og <em>omdirigert</em>.
+    </div>
+
+    <h2>Logg fra siste kjøring</h2>
+    <p>(tider etter UTC)</p>
+    <pre>${log}</pre>
+
+    <div id="footer">
+    </div>
+</body>
+</html>
