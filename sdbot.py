@@ -143,7 +143,7 @@ class DeletionRequest(object):
                     return
 
                 self.status = 'y'
-                mto = dp.templates['Flyttet'][0].parameters[1]
+                mto = dp.templates['Flyttet'][0].parameters[1].value
                 if not site.pages[mto].exists:
                     logger.warning('   "%s" er merket som flyttet til "%s, men siden eksisterer ikke!"', self.subjects[0], mto)
                 else:
