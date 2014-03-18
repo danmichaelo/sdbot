@@ -1,6 +1,7 @@
 numpy
-mako
-werkzeug
+flask
+flup
+oursql
 git+git://github.com/danmichaelo/mwtemplates
 git+git://github.com/mwclient/mwclient
 

@@ -1,39 +1,27 @@
-#!/usr/bin/python
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 
-import cgitb
-cgitb.enable()
-
-import sys
-sys.path.insert(0, '/data/project/sdbot/env-py2.7/lib/python2.7/site-packages/')
-
-from werkzeug.wrappers import Response
-from werkzeug.routing import Map, Rule, NotFound, RequestRedirect
-from werkzeug.utils import redirect
-from wsgiref.handlers import CGIHandler
+from flask import Flask
+from flask import render_template
+from time import time
 
 from datetime import datetime, timedelta
 import calendar
 import locale
 import numpy as np
 
-from cgi import escape
-import urlparse
-from mako.template import Template
-from mako.lookup import TemplateLookup
-
-#import sys
-#sys.path.insert(0, '/data/project/sdbot/env-py2.7/lib/python2.7/site-packages/')
-
-from wsgiref.handlers import CGIHandler
-
 import os, oursql, sqlite3
 
+import locale
 
 for loc in ['no_NO', 'nb_NO.utf8']:
     try:
         locale.setlocale(locale.LC_ALL, loc.encode('utf-8'))
     except locale.Error:
         pass
+
+app = Flask(__name__)
 
 def fromdatetime(d):
     return d.strftime("%F %T")
@@ -44,10 +32,15 @@ def todatetime(s):
 def makelink(article):
     return '//no.wikipedia.org/wiki/Wikipedia:Sletting/' + article
 
-def app(environ, start_response):
-    
-    start_response('200 OK', [('Content-Type', 'text/html')])
-    sql = sqlite3.connect('../../sdbot/sdbot.db')
+###############################################################
+# ROUTES
+###############################################################
+
+@app.route('/')
+def show_index():
+    #app.logger.info('GET_INDEX')
+
+    sql = sqlite3.connect('/data/project/sdbot/sdbot.db')
     cur = sql.cursor()
     mindate, maxdate = map(todatetime, cur.execute('SELECT MIN(close_date), MAX(close_date) FROM closed_requests').fetchone())
     #maxdate.year*12+maxdate.month - (mindate.year*12+mindate.month)
@@ -92,15 +85,17 @@ def app(environ, start_response):
     ctot = cur.execute('SELECT COUNT(*) FROM closed_requests').fetchone()[0]
     startdate = mindate.strftime('%Y-%m-%d')
     
-    
-    f = open('last.log', 'r')
+    f = open('/data/project/sdbot/last.log', 'r')
     log = f.read().decode('utf-8')
     f.close()
-    
-    mylookup = TemplateLookup(directories=['.'], input_encoding='utf-8', output_encoding='utf-8')
-    tpl = Template(filename='template.html', input_encoding='utf-8', output_encoding='utf-8', lookup=mylookup)
-    return tpl.render_unicode(rows=rows, log=log, count=ctot, startdate=startdate).encode('utf-8')
 
+    return render_template('main.html',
+        rows=rows,
+        log=log,
+        count=ctot,
+        startdate=startdate
+    )
 
+if __name__ == "__main__":
+    app.run()
 
-CGIHandler().run(app)

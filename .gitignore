@@ -2,3 +2,5 @@
 *.pyc
 *.log
 wp_private.py
+ENV
+sdbot.db

@@ -120,12 +120,10 @@ class DeletionRequest(object):
         # Find all decisive templates
         dp = TemplateEditor(text)
         decisions = []
-        n = 0
         for t_name, tpls in dp.templates.iteritems():
             if t_name in ['Beholdt', 'Flettet', 'Flyttet', 'Hurtigsletta', 'Hurtigslettet', 'Ny slettenominering', 'Omdirigert', 'Slettet', 'Sletta']:
                 for t in tpls:
-                    n += 1
-                    decisions.append([n, t_name])
+                    decisions.append([t.node.sourceline, t_name])
         decisions.sort(key = lambda x: x[0])
         decisions = [d[1] for d in decisions]
 
