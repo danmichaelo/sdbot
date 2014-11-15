@@ -1,6 +1,6 @@
 == SDBot ==
 
-This is a bot for archiving article for deletion (AfD) discussions ([WP:S](http://no.wikipedia.org/wiki/Wikipedia:S)) at Norwegian Bokmål Wikipedia (no-wp)
+A bot for archiving article for deletion (AfD) discussions ([WP:S](http://no.wikipedia.org/wiki/Wikipedia:S)) at Norwegian Bokmål Wikipedia (no-wp)
 
 See the bots [user page](http://no.wikipedia.org/wiki/Bruker:SDBot) on no-wp for more information. 
 

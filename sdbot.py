@@ -2,11 +2,12 @@
 # python version 2.6.6, logging version 0.5.0.5 at nightshade
 # python version 2.7.1, logging version 0.5.1.2 at willow
 from __future__ import unicode_literals
-from wp_private import sdbotlogin, mailfrom, mailto
+from wp_private import sdbotlogin, mailfrom, mailto, rollbar_token, logentries_token
 
 import sys, os
 import logging
 import logging.handlers
+from logentries import LogentriesHandler
 import argparse
 
 import mwclient
@@ -14,9 +15,13 @@ import re
 import locale
 # except locale.Error:
 
+import rollbar
+rollbar.init(rollbar_token, 'production')  # access_token, environment
+
 import sqlite3
 
 from mwtemplates import TemplateEditor
+
 
 """
 CREATE TABLE deletion_request_list (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,8 +42,11 @@ f.write('python v. %s, logging v. %s\n' % (pv, logging.__version__))
 f.close()
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
+
+logger.addHandler(LogentriesHandler(logentries_token))
+
 
 #smtp_handler = logging.handlers.SMTPHandler( mailhost = ('localhost', 25),
 #                fromaddr = mailfrom, toaddrs = mailto, 
@@ -651,6 +659,10 @@ if __name__ == '__main__':
         runtime = total_seconds(runend - runstart)
         logger.info('Runtime was %.f seconds.' % (runtime))
 
-    except Exception as e:
-        logger.exception('Unhandled Exception')
+    except IOError:
+        rollbar.report_message('Got an IOError in the main loop', 'warning')
+
+    except:
+        # catch-all
+        rollbar.report_exc_info()
 
