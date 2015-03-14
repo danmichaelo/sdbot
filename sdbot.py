@@ -2,12 +2,11 @@
 # python version 2.6.6, logging version 0.5.0.5 at nightshade
 # python version 2.7.1, logging version 0.5.1.2 at willow
 from __future__ import unicode_literals
-from wp_private import sdbotlogin, mailfrom, mailto, rollbar_token, logentries_token
+from wp_private import sdbotlogin, mailfrom, mailto, rollbar_token, logentries_token, papertrails_host, papertrails_port
 
 import sys, os
 import logging
 import logging.handlers
-from logentries import LogentriesHandler
 import argparse
 
 import mwclient
@@ -38,14 +37,12 @@ os.chdir(os.path.abspath(os.path.dirname(__file__)))
 import platform
 pv = platform.python_version()
 f = open('sdbot.log','a')
-f.write('python v. %s, logging v. %s\n' % (pv, logging.__version__))
+f.write('python v. %s, logging v. %s, mwclient v. %s\n' % (pv, logging.__version__, mwclient.__ver__))
 f.close()
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
-
-logger.addHandler(LogentriesHandler(logentries_token))
 
 
 #smtp_handler = logging.handlers.SMTPHandler( mailhost = ('localhost', 25),
@@ -628,6 +625,12 @@ if __name__ == '__main__':
             file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
+        papertrails = logging.handlers.SysLogHandler(address=(papertrails_host, papertrails_port))
+        f2 = logging.Formatter('%(asctime)s ToolLabs SDBot %(levelname)s %(message)s', datefmt='%Y-%m-%dT%H:%M:%S')
+        papertrails.setFormatter(f2)
+        papertrails.setLevel(logging.INFO)
+        logger.addHandler(papertrails)
 
         warn_handler = logging.FileHandler('warnings.log')
         warn_handler.setLevel(logging.WARNING)
