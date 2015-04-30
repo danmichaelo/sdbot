@@ -5,3 +5,4 @@ oursql
 git+git://github.com/danmichaelo/mwtemplates
 git+git://github.com/mwclient/mwclient
 rollbar
+requests[security]
