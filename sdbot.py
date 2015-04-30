@@ -12,6 +12,7 @@ import argparse
 import mwclient
 import re
 import locale
+import platform
 # except locale.Error:
 
 import rollbar
@@ -51,6 +52,9 @@ formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
                 
 #smtp_handler.setLevel(logging.ERROR)
 #logger.addHandler(smtp_handler)
+
+distro = platform.linux_distribution()
+logger.info('Running on %s %s %s', *distro)
 
 
 def total_seconds(td):

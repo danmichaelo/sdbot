@@ -17,6 +17,9 @@
 # Mail if job aborted
 #$ -m a
 
+# Run on trusty
+#$ -l release=trusty
+
 echo "=== This is SDBot running on $(hostname) ===" >> sdbot.log
 
 . ENV/bin/activate
