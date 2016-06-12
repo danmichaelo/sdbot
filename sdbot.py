@@ -21,7 +21,9 @@ rollbar.init(rollbar_token, 'production')  # access_token, environment
 import sqlite3
 
 from mwtemplates import TemplateEditor
+from mwclient.sleep import Sleepers
 
+sleepers = Sleepers(10, 30)
 
 """
 CREATE TABLE deletion_request_list (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +105,7 @@ class DeletionRequest(object):
 
         logger.info('<> %s' % ', '.join(self.titles))
 
-        text = page.edit()
+        text = page.text()
         # Find all headings
         headings = self.r_h3_heading.findall(text)
         # Malformed request
@@ -157,7 +159,7 @@ class DeletionRequest(object):
                     logger.info('   "%s" er merket som flyttet til "%s"', self.subjects[0], mto)
                     page_redir = site.Pages['Wikipedia:Sletting/%s' % mto]
                     if not page_redir.exists:
-                        txt = page_redir.edit()
+                        txt = page_redir.text()
                         if len(txt) == 0:
                             redir_target = 'Wikipedia:Sletting/%s' % self.subjects[0]
                             logger.info('   Lager omdirigering fra "Wikipedia:Sletting/%s" til "%s"', mto, redir_target)
@@ -260,11 +262,12 @@ class DeletionRequest(object):
 
         template = '{{Sletteforslag avslutning uklar}}\n'
 
-        wait_token = site.wait_token()
+        sleeper = sleepers.make()
+
         while True:
             try:
                 summary = 'Venter med autoarkivering pga. uklar avslutning'
-                text = template + page_nom.edit()
+                text = template + page_nom.text()
                 if self.simulate:
                     print "--------" + page_nom.name + ": " + summary + "------------"
                     print text
@@ -272,7 +275,7 @@ class DeletionRequest(object):
                     page_nom.save(text, summary = summary)
             except mwclient.EditError, e:
                 try:
-                    site.wait(wait_token)
+                    sleeper.sleep()
                 except mwclient.MaximumRetriesExceeded:
                     return logger.error('   Unable to save page!')
             else:
@@ -291,11 +294,11 @@ class DeletionRequest(object):
 
             kept = '{{Sletting-beholdt | %s | %s }}\n' % (nomination_date, name)
 
-            wait_token = site.wait_token()
+            sleeper = sleepers.make()
             while True:
                 try:
                     summary = 'Beholdt etter [[%s|slettediskusjon]]' % name
-                    text = kept + talk_page.edit()
+                    text = kept + talk_page.text()
                     if self.simulate:
                         print "--------" + talk_page.name + ": " + summary + "------------"
                         print text
@@ -303,7 +306,7 @@ class DeletionRequest(object):
                         talk_page.save(text, summary = summary)
                 except mwclient.EditError, e:
                     try:
-                        site.wait(wait_token)
+                        sleeper.sleep()
                     except mwclient.MaximumRetriesExceeded:
                         return logger.error('   Unable to save page!')
                 else:
@@ -315,7 +318,7 @@ class DeletionRequest(object):
         if page_subject.name in backlinks:
             logger.info('   Fjerner {{Sletting}} fra %s' % page_subject.name)
 
-            text = page_subject.edit()
+            text = page_subject.text()
             try:
                 dp = TemplateEditor(text)
                 if 'Sletting' in dp.templates:
@@ -334,7 +337,7 @@ class DeletionRequest(object):
                 text = re.sub(r'\{\{[Ss]lett.+?\}\}', '', text) # this may fail if template contains subtemplates
                 logger.info('  vha. regexp')
 
-            wait_token = site.wait_token()
+            sleeper = sleepers.make()
             while True:
                 try:
                     summary = 'Beholdt etter [[%s|slettediskusjon]]' % name
@@ -345,7 +348,7 @@ class DeletionRequest(object):
                         page_subject.save(text, summary = summary)
                 except mwclient.EditError, e:
                     try:
-                        site.wait(wait_token)
+                        sleeper.sleep()
                     except mwclient.MaximumRetriesExceeded:
                         return logger.error('Unable to save page')
                 else:
@@ -366,7 +369,7 @@ class SDBot(object):
         self.cursor = self.database.cursor()
 
         #page = self.site.Pages['User:%s/notification-blacklist' % self.site.username]
-        #text = page.edit(readonly = True)
+        #text = page.text()
         #self.notification_blacklist = [i.strip() for i in text.split('\n')]
         #self.notification_blacklist = []
 
@@ -386,7 +389,7 @@ class SDBot(object):
 
         # Read listing and normalize
         page = site.Pages['Wikipedia:Sletting']
-        old_text = page.edit(section = 3)
+        old_text = page.text(section = 3)
         headings = self.r_h2_heading.findall(old_text)
         if len(headings) != 1 or headings[0].lower().find('liste over slettekandidater') == -1:
             raise StandardError('Fant ikke den forventede overskriften på WP:S')
@@ -436,28 +439,28 @@ class SDBot(object):
                 summary_arc.append('%d diskusjon%s til [[Wikipedia:Sletting/Beholdt/%s]]' \
                         % (len(archive_kept), 'er' if len(archive_kept) > 1 else '', monthyear))
                 # Save to archive
-                wait_token = site.wait_token()
+                sleeper = sleepers.make()
                 while True:
                     try:
                         self.archive_discussions('kept', archive_kept, monthyear)
                     except mwclient.InsufficientPermission:
                         raise
                     except mwclient.EditError:
-                        site.wait(wait_token)
+                        sleeper.sleep()
                     else:
                         break
             if archive_deleted:
                 summary_arc.append('%d diskusjon%s til [[Wikipedia:Sletting/Slettet/%s]]' % \
                         (len(archive_deleted), 'er' if len(archive_deleted) > 1 else '', monthyear))
                 # Save to archive
-                wait_token = site.wait_token()
+                sleeper = sleepers.make()
                 while True:
                     try:
                         self.archive_discussions('deleted', archive_deleted, monthyear)
                     except mwclient.InsufficientPermission:
                         raise
                     except mwclient.EditError:
-                        site.wait(wait_token)
+                        sleeper.sleep()
                     else:
                         break
             summary.append('Arkiverer ' + ', '.join(summary_arc))
@@ -489,13 +492,13 @@ class SDBot(object):
             if not page.exists:
                 text = '{{Arkivert|[[Wikipedia:Sletting]]}}\n{{Arkiv|{{Wikipedia:Sletting/Beholdt/Arkiv}}}}\n'
             else:
-                text = page.edit()
+                text = page.text()
         else:
             page = site.Pages['Wikipedia:Sletting/Slettet/%s' % monthyear]
             if not page.exists:
                 text = '{{Arkivert|[[Wikipedia:Sletting]]}}\n{{Arkiv|{{Wikipedia:Sletting/Slettet/Arkiv}}}}\n'
             else:
-                text = page.edit()
+                text = page.text()
 
         # Archive
         text += '\n' + '\n'.join(('{{Sletteforslag|%s|%s}}' % ('|'.join(request.subjects), request.status) for request in requests))
@@ -517,79 +520,6 @@ class SDBot(object):
         if not self.simulate:
             self.database.commit()
 
-
-    #def notify_uploaders(self, page, subject):
-    #    self.cursor.execute("""SELECT 1 FROM notifications WHERE
-    #        deletion_request = ?""", (page.name, ))
-    #    if self.cursor.fetchone(): return
-
-    #    revisions = page.revisions(dir = 'newer', limit = 1, prop = 'timestamp')
-    #    timedelta = datetime.utcnow() - datetime(*revisions.next()['timestamp'][:6])
-
-    #    if (timedelta.seconds + timedelta.days * 86400) >= self.notification_timeout:
-    #        self.cursor.execute("""INSERT INTO notifications VALUES
-    #            (NULL, ?)""", (page.name, ))
-    #        self.database.commit()
-
-    #        #image = self.site.Images[subject[6:]]
-    #        backlinks = page.backlinks(generator = False)
-
-    #        already_notified = [None]
-    #        #imageinfo = [image.imageinfo]
-    #        #imageinfo.extend(image.imagehistory())
-    #        for item in imageinfo:
-    #            if 'user' in item and item.get('user') not in already_notified:
-    #                already_notified.append(item['user'])
-    #                try:
-    #                    self.notify_uploader(page, subject, backlinks, item['user'])
-    #                except mwclient.ProtectedPageError:
-    #                    self.output('Warning! [[User talk:%s]] is protected!' % item['user'])
-
-    #r_redirect = re.compile(ur'^\s*\#REDIRECT \[\[[Uu]ser[_ ]talk\:([^]|]*)\]\]')
-    #def notify_uploader(self, page, subject, backlinks, user, from_redirect = False):
-    #    if user in self.notification_blacklist: return
-    #    if ('User talk:' + user) in backlinks: return
-
-    #    self.output('Notifying %s of the deletion request of %s' % (user, subject))
-
-    #    user_talk = self.site.Pages['User talk:' + user]
-    #    # Check whether the user has editted the deletion request
-    #    revisions = page.revisions(user = user, limit = 1)
-    #    try:
-    #        revisions.next()
-    #    except StopIteration:
-    #        pass
-    #    else:
-    #        return
-
-    #    wait_token = self.site.wait_token()
-    #    while True:
-    #        try:
-    #            text = user_talk.edit()
-    #            if user_talk.redirect:
-    #                if from_redirect:
-    #                    return self.output('Warning! Double redirect found on User_talk:%s!' % user)
-    #                return self.notify_uploader(page, subject, backlinks, user_talk.links(False)[0], True)
-
-    #            text += '\n{{subst:User:DRBot/notify-uploader|%s}} ~~~~~' % subject
-    #            user_talk.save(text, summary = 'Notification of deletion request of %s' % subject)
-    #        except mwclient.EditError:
-    #            try:
-    #                self.site.wait(wait_token)
-    #            except mwclient.MaximumRetriesExceeded:
-    #                return self.output('Unable to report to %s.' % user)
-    #        else:
-    #            return
-
-
-
-    #def set_archived_listing(self, year, month, day):
-    #    self.cursor.execute("""UPDATE deletion_request_list
-    #        SET archived = 1 WHERE year = ? AND month = ? AND 
-    #        day = ?""", (year, month, day))
-    #    self.database.commit()
-
-
     def run(self, iterator = None):
         self.read_listing()
 
@@ -608,10 +538,6 @@ class SDBot(object):
     @staticmethod
     def _escape_wikilink(match):
         return '[[:%s]]' % match.group(1)
-
-    #@staticmethod
-    #def output(message):
-    #    print time.strftime('[%Y-%m-%d %H:%M:%S]'), message.encode('utf-8')
 
 if __name__ == '__main__':
 
