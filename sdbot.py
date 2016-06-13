@@ -484,7 +484,7 @@ class SDBot(object):
                 print "--------" + page.name + ": " + summary + "------------"
                 print text
             else:
-                page.save(text, summary = summary)
+                page.save(text, section = 3, summary = summary)
  
     def archive_discussions(self, archive, requests, monthyear):
         if archive == 'kept':
