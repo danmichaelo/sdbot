@@ -64,8 +64,7 @@ def total_seconds(td):
     return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
 
 
-site = mwclient.Site('no.wikipedia.org')
-site.login(*sdbotlogin)
+site = mwclient.Site('no.wikipedia.org', **sdbotlogin)
 admins = [i['name'] for i in site.allusers(group = 'sysop')]
 
 class DeletionRequest(object):
