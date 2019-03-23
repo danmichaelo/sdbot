@@ -1,6 +1,11 @@
 *.swp
 *.pyc
+*.egg-info
 *.log
+*.out
+*.err
+.env
 wp_private.py
 ENV
 sdbot.db
+www/python/venv

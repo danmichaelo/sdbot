@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
-
 from flask import Flask
 from flask import render_template
 from time import time
@@ -11,17 +7,17 @@ import calendar
 import locale
 import numpy as np
 
-import os, oursql, sqlite3
-
+import os
+import sqlite3
 import locale
 
 for loc in ['no_NO', 'nb_NO.utf8']:
     try:
-        locale.setlocale(locale.LC_ALL, loc.encode('utf-8'))
+        locale.setlocale(locale.LC_ALL, loc)
     except locale.Error:
         pass
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
 
 def fromdatetime(d):
     return d.strftime("%F %T")
@@ -42,7 +38,7 @@ def show_index():
 
     sql = sqlite3.connect('/data/project/sdbot/sdbot.db')
     cur = sql.cursor()
-    mindate, maxdate = map(todatetime, cur.execute('SELECT MIN(close_date), MAX(close_date) FROM closed_requests').fetchone())
+    mindate, maxdate = list(map(todatetime, cur.execute('SELECT MIN(close_date), MAX(close_date) FROM closed_requests').fetchone()))
     #maxdate.year*12+maxdate.month - (mindate.year*12+mindate.month)
     cm = mindate.month
     cy = mindate.year
@@ -86,7 +82,7 @@ def show_index():
     startdate = mindate.strftime('%Y-%m-%d')
     
     f = open('/data/project/sdbot/last.log', 'r')
-    log = f.read().decode('utf-8')
+    log = f.read()
     f.close()
 
     return render_template('main.html',

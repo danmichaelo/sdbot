@@ -1,9 +1,4 @@
 #encoding=utf-8
-# python version 2.6.6, logging version 0.5.0.5 at nightshade
-# python version 2.7.1, logging version 0.5.1.2 at willow
-from __future__ import unicode_literals
-from wp_private import sdbotlogin, mailfrom, mailto, rollbar_token, logentries_token, papertrails_host, papertrails_port
-
 import sys, os
 import logging
 import logging.handlers
@@ -15,8 +10,11 @@ import locale
 import platform
 # except locale.Error:
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import rollbar
-rollbar.init(rollbar_token, 'production')  # access_token, environment
+rollbar.init(os.getenv('ROLLBAR_TOKEN'), 'production')  # access_token, environment
 
 import sqlite3
 
@@ -35,21 +33,13 @@ CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,
 from datetime import datetime
 runstart = datetime.now()
 
-os.chdir(os.path.abspath(os.path.dirname(__file__)))
-
-import platform
-pv = platform.python_version()
-f = open('sdbot.log','a')
-f.write('python v. %s, logging v. %s, mwclient v. %s\n' % (pv, logging.__version__, mwclient.__ver__))
-f.close()
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 
 
 #smtp_handler = logging.handlers.SMTPHandler( mailhost = ('localhost', 25),
-#                fromaddr = mailfrom, toaddrs = mailto, 
+#                fromaddr = os.getenv('MAIL_FROM'), toaddrs = [os.getenv('MAIL_TO')], 
 #                subject=u"[toolserver] SDBot crashed!")
                 
 #smtp_handler.setLevel(logging.ERROR)
@@ -64,7 +54,12 @@ def total_seconds(td):
     return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
 
 
-site = mwclient.Site('no.wikipedia.org', **sdbotlogin)
+site = mwclient.Site('no.wikipedia.org',
+            consumer_token=os.getenv('MW_CONSUMER_TOKEN'),
+            consumer_secret=os.getenv('MW_CONSUMER_SECRET'),
+            access_token=os.getenv('MW_ACCESS_TOKEN'),
+            access_secret=os.getenv('MW_ACCESS_SECRET'))
+
 admins = [i['name'] for i in site.allusers(group = 'sysop')]
 
 class DeletionRequest(object):
@@ -76,8 +71,8 @@ class DeletionRequest(object):
             title = title.replace('  ', ' ')
         return title[0].upper() + title[1:]
 
-    r_h3_heading = re.compile(ur'^\s*\=\=\=\s*(.*?)\s*\=\=\=\s*$', re.MULTILINE)
-    r_link = re.compile(ur'\[\[[: ]*(.*?)\s*\]\]')
+    r_h3_heading = re.compile(r'^\s*\=\=\=\s*(.*?)\s*\=\=\=\s*$', re.MULTILINE)
+    r_link = re.compile(r'\[\[[: ]*(.*?)\s*\]\]')
     def __init__(self, titles, page, simulate = False):
         
         self.archival_threshold = 86400*2
@@ -121,7 +116,7 @@ class DeletionRequest(object):
         self.subjects = [self.normalize_title(s) for s in m_subjects]
         
         # Wrong heading
-        if not re.search(ur'(?i)^Wikipedia\:Sletting\/%s$' % re.escape(self.subjects[0]), page.name):
+        if not re.search(r'(?i)^Wikipedia\:Sletting\/%s$' % re.escape(self.subjects[0]), page.name):
             logger.warning('!! %s: Den første lenken i overskriften, "%s", matcher ikke URLen"' % (page.name, self.subjects[0]))
             return
 
@@ -130,7 +125,7 @@ class DeletionRequest(object):
         # Find all decisive templates
         dp = TemplateEditor(text)
         decisions = []
-        for t_name, tpls in dp.templates.iteritems():
+        for t_name, tpls in dp.templates.items():
             if t_name in ['Beholdt', 'Flettet', 'Flyttet', 'Hurtigsletta', 'Hurtigslettet', 'Ny slettenominering', 'Omdirigert', 'Slettet', 'Sletta']:
                 for t in tpls:
                     decisions.append([t.node.sourceline, t_name])
@@ -182,8 +177,8 @@ class DeletionRequest(object):
 
         # Checking for closedness
         if self.status != '': 
-            self.first_rev = page.revisions(limit = 1, dir = 'newer').next()
-            self.last_rev = page.revisions(limit = 1).next()
+            self.first_rev = next(page.revisions(limit = 1, dir = 'newer'))
+            self.last_rev = next(page.revisions(limit = 1))
             self.open_user = self.first_rev.get('user')
             self.open_date = datetime(*self.first_rev.get('timestamp')[:6])
             self.close_user = self.last_rev.get('user')
@@ -208,7 +203,7 @@ class DeletionRequest(object):
                 logger.info('   Avsluttet med status: %s. Arkiveres som %s om %.1f timer' % (self.status, arkiv, (self.archival_threshold-ts)/3600.))
 
                 if self.status == 'b' or self.status == 'y':
-                    firstrev = page.revisions(dir = 'newer', limit = 1).next()
+                    firstrev = next(page.revisions(dir = 'newer', limit = 1))
                     nomdate = datetime(*firstrev['timestamp'][:6]).strftime('%Y-%m-%d')
                     for subject in self.subjects:
                         page_subject = site.Pages[subject].resolve_redirect()
@@ -268,11 +263,11 @@ class DeletionRequest(object):
                 summary = 'Venter med autoarkivering pga. uklar avslutning'
                 text = template + page_nom.text()
                 if self.simulate:
-                    print "--------" + page_nom.name + ": " + summary + "------------"
-                    print text
+                    print("--------" + page_nom.name + ": " + summary + "------------")
+                    print(text)
                 else:
                     page_nom.save(text, summary = summary)
-            except mwclient.EditError, e:
+            except mwclient.EditError as e:
                 try:
                     sleeper.sleep()
                 except mwclient.MaximumRetriesExceeded:
@@ -299,11 +294,11 @@ class DeletionRequest(object):
                     summary = 'Beholdt etter [[%s|slettediskusjon]]' % name
                     text = kept + talk_page.text()
                     if self.simulate:
-                        print "--------" + talk_page.name + ": " + summary + "------------"
-                        print text
+                        print("--------" + talk_page.name + ": " + summary + "------------")
+                        print(text)
                     else:
                         talk_page.save(text, summary = summary)
-                except mwclient.EditError, e:
+                except mwclient.EditError as e:
                     try:
                         sleeper.sleep()
                     except mwclient.MaximumRetriesExceeded:
@@ -341,11 +336,11 @@ class DeletionRequest(object):
                 try:
                     summary = 'Beholdt etter [[%s|slettediskusjon]]' % name
                     if self.simulate:
-                        print "--------" + page_subject.name + ": " + summary + "------------"
-                        print text
+                        print("--------" + page_subject.name + ": " + summary + "------------")
+                        print(text)
                     else:
                         page_subject.save(text, summary = summary)
-                except mwclient.EditError, e:
+                except mwclient.EditError as e:
                     try:
                         sleeper.sleep()
                     except mwclient.MaximumRetriesExceeded:
@@ -377,12 +372,12 @@ class SDBot(object):
         page.get_token('edit', True)
 
 
-    r_deletion_request = re.compile(ur'\{\{[Ss]letteforslag[\s]*\|(.*?)\}\}')
-    r_h2_heading = re.compile(ur'^\s*\=\=\s*(.*?)\s*\=\=\s*$', re.MULTILINE)
+    r_deletion_request = re.compile(r'\{\{[Ss]letteforslag[\s]*\|(.*?)\}\}')
+    r_h2_heading = re.compile(r'^\s*\=\=\s*(.*?)\s*\=\=\s*$', re.MULTILINE)
     def read_listing(self):
 
         # Get members of the category:
-        catname = u'Sider som er foreslått slettet'
+        catname = 'Sider som er foreslått slettet'
         cat = site.categories[catname]
         catmembers = [c.name for c in cat.members() if c.namespace != 14]
 
@@ -391,11 +386,11 @@ class SDBot(object):
         old_text = page.text(section = 3)
         headings = self.r_h2_heading.findall(old_text)
         if len(headings) != 1 or headings[0].lower().find('liste over slettekandidater') == -1:
-            raise StandardError('Fant ikke den forventede overskriften på WP:S')
+            raise Exception('Fant ikke den forventede overskriften på WP:S')
 
-        deletion_requests = map(self.normalize_title, self.r_deletion_request.findall(re.sub('<\!--.+?-->', '', old_text)))
+        deletion_requests = list(map(self.normalize_title, self.r_deletion_request.findall(re.sub('<\!--.+?-->', '', old_text))))
         deletion_requests = [[arg.strip() for arg in request.split('|')] for request in deletion_requests]
-        deletion_requests = [filter(lambda x: x not in ['','hs','s','b', 'f', 'y', 'o'], request) for request in deletion_requests]
+        deletion_requests = [[x for x in request if x not in ['','hs','s','b', 'f', 'y', 'o']] for request in deletion_requests]
 
         # Compare
         flatlist = [item for sublist in deletion_requests for item in sublist]
@@ -404,7 +399,7 @@ class SDBot(object):
             logger.info('Found %d pages in %s not listed on WP:S', len(notlisted), catname)
             for pagename in notlisted:
                 logger.info('  - %s', pagename)
-                spage = site.pages[u'Wikipedia:Sletting/' + pagename]
+                spage = site.pages['Wikipedia:Sletting/' + pagename]
                 # if page.exists:
                     # logger.info('     - exists')
 
@@ -480,8 +475,8 @@ class SDBot(object):
             text += '\n{{Sletteforslag|%s%s}}' % ('|'.join(request), status)
         if text != old_text:
             if self.simulate:
-                print "--------" + page.name + ": " + summary + "------------"
-                print text
+                print("--------" + page.name + ": " + summary + "------------")
+                print(text)
             else:
                 page.save(text, section = 3, summary = summary)
  
@@ -505,8 +500,8 @@ class SDBot(object):
         # Save
         summary = 'Arkiverer %d diskusjon%s' % (len(requests), 'er' if len(requests) > 1 else '')
         if self.simulate:
-            print "--------" + page.name + ": " + summary + "------------"
-            print text
+            print("--------" + page.name + ": " + summary + "------------")
+            print(text)
         else:
             page.save(text, summary = summary)
 
@@ -514,7 +509,7 @@ class SDBot(object):
         for request in requests:
             for subject in request.subjects:
                 data = [subject, request.open_date, request.close_date, request.open_user, request.close_user, request.status, page.name]
-                self.cursor.execute(u'''INSERT INTO closed_requests (name, open_date, close_date, open_user, close_user, decision, archive)
+                self.cursor.execute('''INSERT INTO closed_requests (name, open_date, close_date, open_user, close_user, decision, archive)
                             VALUES(?,?,?,?,?,?,?)''', data)
         if not self.simulate:
             self.database.commit()
@@ -529,7 +524,7 @@ class SDBot(object):
             title = title.replace('  ', ' ')
         return title[0].upper() + title[1:]
 
-    r_unsafe_wikilink = re.compile(ur'\[\[\s*([^:][^]]*)\s*\]\]')
+    r_unsafe_wikilink = re.compile(r'\[\[\s*([^:][^]]*)\s*\]\]')
     @classmethod
     def escape_wikilinks(self, text):
         return self.r_unsafe_wikilink.sub(self._escape_wikilink, text)
@@ -538,8 +533,7 @@ class SDBot(object):
     def _escape_wikilink(match):
         return '[[:%s]]' % match.group(1)
 
-if __name__ == '__main__':
-
+def main():
     try:
 
         parser = argparse.ArgumentParser( description = 'The SDBot' )
@@ -555,7 +549,7 @@ if __name__ == '__main__':
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
-        papertrails = logging.handlers.SysLogHandler(address=(papertrails_host, papertrails_port))
+        papertrails = logging.handlers.SysLogHandler(address=(os.getenv('PAPERTRAILS_HOST'), int(os.getenv('PAPERTRAILS_PORT'))))
         f2 = logging.Formatter('%(asctime)s ToolLabs SDBot %(levelname)s %(message)s', datefmt='%Y-%m-%dT%H:%M:%S')
         papertrails.setFormatter(f2)
         papertrails.setLevel(logging.INFO)
@@ -579,7 +573,7 @@ if __name__ == '__main__':
         
         for loc in ['no_NO', 'nb_NO.utf8']:
             try:
-                locale.setlocale(locale.LC_ALL, loc.encode('utf-8'))
+                locale.setlocale(locale.LC_ALL, loc)
                 logger.info('Locale set to %s' % loc)
             except locale.Error:
                 pass
