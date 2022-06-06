@@ -1,13 +1,16 @@
-== SDBot ==
+# sdbot
 
 A bot for archiving article for deletion (AfD) discussions ([WP:S](http://no.wikipedia.org/wiki/Wikipedia:S)) at Norwegian Bokmål Wikipedia (no-wp)
 
-See the bots [user page](http://no.wikipedia.org/wiki/Bruker:SDBot) on no-wp for more information. 
+## Deployment notes
 
-To see available command-line switches, run <code>python sdbot.py -h</code>
+See https://wikitech.wikimedia.org/wiki/Tool:SDBot
 
-DB Setup: <code>sqlite3 sdbot.db</code> and 
-````
+## DB Setup
+
+`sqlite3 sdbot.db` and 
+
+```
 CREATE TABLE "closed_requests" (
     id INTEGER NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -18,5 +21,4 @@ CREATE TABLE "closed_requests" (
     decision TEXT NOT NULL,
     archive TEXT NOT NULL
 );
-````
-
+```
