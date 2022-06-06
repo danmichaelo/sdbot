@@ -1,2 +1,0 @@
-MAILTO=""
-52 * * * * jsub -cwd -N sdbot run.job
