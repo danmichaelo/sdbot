@@ -9,3 +9,5 @@ wp_private.py
 ENV
 sdbot.db
 www/python/venv
+.toolskube
+.vim
