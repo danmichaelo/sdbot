@@ -1,0 +1,8 @@
+# https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework
+---
+- name: sdbot
+  command: ./jobs/run.sh
+  image: tf-python39
+  schedule: "52 * * * *"
+  emails: onfailure
+

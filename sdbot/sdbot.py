@@ -45,7 +45,7 @@ formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 #smtp_handler.setLevel(logging.ERROR)
 #logger.addHandler(smtp_handler)
 
-distro = platform.linux_distribution()
+distro = platform.platform()
 logger.info('Running on %s %s %s', *distro)
 
 
