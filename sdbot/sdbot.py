@@ -46,7 +46,7 @@ formatter = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
 #logger.addHandler(smtp_handler)
 
 distro = platform.platform()
-logger.info('Running on %s %s %s', *distro)
+logger.info('Running on %s', distro)
 
 
 def total_seconds(td):
