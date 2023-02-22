@@ -75,7 +75,7 @@ class DeletionRequest(object):
     r_link = re.compile(r'\[\[[: ]*(.*?)\s*\]\]')
     def __init__(self, titles, page, simulate = False):
         
-        self.archival_threshold = 86400*2
+        self.archival_threshold = 86400
         self.simulate = simulate
 
         self.titles = titles
